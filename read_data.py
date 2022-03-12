@@ -5,3 +5,4 @@ with open('roman_ketkov_followers.pickle', 'rb') as file:
 
 for i in data:
     print(i.__dict__)
+eawdawdawdawd

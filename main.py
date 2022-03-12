@@ -2,7 +2,6 @@ import json
 import pickle
 import time
 from datetime import datetime, timedelta
-from typing import Any
 
 from instagrapi import Client
 
@@ -47,7 +46,7 @@ class ClientInterface:
         self.client.user_follow(target_id)
 
 
-def to_pickle(data: Any, file_name):
+def to_pickle(data, file_name):
     with open(file_name, 'wb') as file:
         pickle.dump(data, file)
 
@@ -73,12 +72,9 @@ class Main:
             self.iterable_followers = iter(self.non_followed)
 
     def __call__(self, amount: int = 300, timeout: int = 30):
+        followed = []
         while self.c < amount:
             to_pickle(self.__dict__, 'backup.pickle')
-            if self.c % 50 == 0 and not self.c == amount:
-                now = datetime.now()
-                print(f'next iter would be at {now + timedelta(minutes=timeout)}')
-                time.sleep(60 * timeout)
             self.follower = self.followers[self.follower_index]
             self.follower_index += 1
             if self.follower.is_private:
@@ -91,13 +87,19 @@ class Main:
                 self.c += 1
                 print(self.target_info)
                 print('followed %s' % self.c)
-                yield self.target_info
+                followed.append(self.target_info)
+                if self.c % 100 == 0 and self.c != amount:
+                    now = datetime.now()
+                    print(f'next iter would be at {now + timedelta(minutes=timeout)}')
+                    time.sleep(60 * timeout)
+        return followed
 
 
 if __name__ == '__main__':
-    username, password = ('alexey_naidiuk', 'Zxcvasdfqwer1234')
     device = json.load(open('device.json'))
+    username, password = ('alexey_naidiuk', 'Zxcvasdfqwer1234')
     with ClientInterface(username, password, device) as client:
         client.login()
         main = Main(client, 'slavakononovofficial')
-        main(500)
+        followed = main(600, 30)
+        to_pickle(followed, 'followed.pickle')
