@@ -5,6 +5,7 @@ import pickle
 import sqlite3
 from datetime import datetime, timedelta
 from multiprocessing.pool import ThreadPool
+from pathlib import Path
 from time import sleep
 from typing import List
 
@@ -17,18 +18,39 @@ class ClientInterface:
     def __init__(self, username: str, password: str, device: dict = None):
         self.username, self.password, self.device = username, password, device
         self.client = Client()
+        self.set_settings()
 
     def login(self) -> bool:
-        self.set_settings()
         return self.client.login(self.username, self.password)
 
     def set_settings(self) -> None:
-        if self.device:
-            self.client.set_settings(self.device)
+        if Path('dumped_settings.json').exists():
+            dumped_settings = json.load(open('dumped_settings.json'))
+            self.client.set_settings(dumped_settings)
+        else:
+            self.client.set_settings(
+                {
+                    'user_agent': 'Instagram 217.0.0.15.474 Android (30/11; 450dpi; 10'
+                                  '80x2179; samsung; SM-A725F; a72q; qcom; en_US; 343997935)',
+                    "device_settings": {
+                        "app_version": "217.0.0.15.474",
+                        "android_version": "30/11",
+                        "android_release": "11",
+                        "dpi": "450dpi",
+                        "resolution": "1080x2179",
+                        "manufacturer": "samsung",
+                        "device": "a72q",
+                        "model": "SM-A725F",
+                        "cpu": "qcom",
+                        "version_code": "343997935"
+                    }
+                }
+            )
 
     def dump_settings(self) -> None:
-        with open('device.json', 'w') as file:
-            json.dump(self.client.get_settings(), file)
+        self.client.dump_settings(
+            Path('dumped_settings.json')
+        )
 
     def __enter__(self):
         return self
@@ -80,15 +102,14 @@ class Follow:
         self.targets = targets_list
         self.followed_amount = 0
         self.follower_index = 0
+        self.c = 0
+        self.from_backup: bool = from_backup
         if from_backup:
             self.__dict__ = from_pickle('follow_flow_backup.pickle')
 
     def __call__(self, amount_to_follow: int = 5000):
         print('following')
         print('followed already %s' % self.followed_amount)
-        c = 0
-        sleep_amount = 0
-        sleep_info = ''
         while self.followed_amount <= amount_to_follow:
             to_pickle(self.__dict__, 'follow_flow_backup.pickle')
             self.follower = self.targets[self.follower_index]
@@ -102,20 +123,20 @@ class Follow:
                     con.execute('insert into followed (username) values (?)', (self.target.username,))
                     con.commit()
                 self.followed_amount += 1
-                c += 1
+                self.c += 1
                 print('followed %s' % self.target.username, self.target.follower_count, self.target.following_count)
                 now = datetime.now()
                 son_na_12_chasov = self.followed_amount % 400 == 0
                 if son_na_12_chasov:
                     sleep_amount = 60 * 60 * 12
                     sleep_info = f'next iter would be at {now + timedelta(hours=12)}', 'son na 12 chasov'
-                    c = 0
+                    self.c = 0
                     print(sleep_info, self.followed_amount)
                     sleep(sleep_amount)
-                elif c % 60 == 0 and not son_na_12_chasov:
+                elif self.c % 60 == 0 and not son_na_12_chasov:
                     sleep_amount = 60 * 60
-                    sleep_info = f'next iter would be at {now + timedelta(hours=12)}', 'son na 60 minut'
-                    c = 0
+                    sleep_info = f'next iter would be at {now + timedelta(hours=1)}', 'son na 1 chas'
+                    self.c = 0
                     print(sleep_info, self.followed_amount)
                     sleep(sleep_amount)
 
@@ -146,12 +167,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
     target = args.target
     username, password = ('alexey_naidiuk', 'Zxcvasdfqwer1234')
-    device = None
-    try:
-        device = json.load(open('device.json'))
-    except FileNotFoundError:
-        print('device not found')
-    with ClientInterface(username, password, device) as client:
+    with ClientInterface(username, password) as client:
         client.login()
         targets_list = targets(client, target, 0, from_backup=args.from_backup)
         follow = Follow(client, targets_list, from_backup=args.from_backup)
